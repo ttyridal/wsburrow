@@ -427,7 +427,7 @@ def test_mtls_roundtrip(manager):
 
 
 def test_mtls_rejected(manager):
-    """Test that wsburrow keeps retrying (not fatal) when server demands client cert but none configured."""
+    """Test that wsburrow exits when server demands client cert but none configured."""
     import tempfile, shutil
     tmpdir = tempfile.mkdtemp()
     ca_cert, srv_cert, srv_key, _cli_cert, _cli_key = _gen_ca_chain(tmpdir)
@@ -453,14 +453,13 @@ def test_mtls_rejected(manager):
              f"wss://localhost:{wss_port}", "--insecure", "--pool-size", "1"],
             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
         )
-        time.sleep(5)
         try:
-            ret = p.poll()
-            assert ret is None, f"wsburrow should keep retrying, but exited with code {ret}"
-            log("wsburrow running (retrying as expected)")
-        finally:
-            p.terminate()
+            ret = p.wait(timeout=15)
+            assert ret != 0, f"wsburrow should exit non-zero, got code {ret}"
+        except subprocess.TimeoutExpired:
+            p.kill()
             p.wait()
+            assert False, "wsburrow should have exited, but timed out"
 
     shutil.rmtree(tmpdir, ignore_errors=True)
     log("PASS: test_mtls_rejected")

@@ -6,6 +6,7 @@
 #include <string.h>
 #include <stdio.h>
 #include <libubox/list.h>
+#include <unistd.h>
 
 #define MAX_POOL 32
 #define PONG_TIMEOUT_MS  8000
@@ -37,6 +38,7 @@ struct tunnel_pool {
     int use_tls;
     int insecure;
     int client_cert_set;
+    int ever_connected;
     struct pool_entry entries[MAX_POOL];
     struct uloop_timeout ping_timer;
 };
@@ -185,6 +187,7 @@ void tunnel_pool_destroy(struct tunnel_pool *pool)
 static void pool_entry_on_connect(void *ctx)
 {
     struct pool_entry *e = (struct pool_entry *)ctx;
+    e->pool->ever_connected = 1;
     e->retry_count = 0;
 }
 
@@ -219,15 +222,19 @@ static void pool_entry_on_close(void *ctx)
     uloop_timeout_cancel(&e->pong_timer);
     e->dead = 1;
 
-    if (e->pool->client_cert_set) {
-        int all_dead = 1;
-        for (int i = 0; i < e->pool->pool_size; i++)
-            if (!e->pool->entries[i].dead)
-                all_dead = 0;
-        if (all_dead) {
+    int all_dead = 1;
+    for (int i = 0; i < e->pool->pool_size; i++)
+        if (!e->pool->entries[i].dead)
+            all_dead = 0;
+
+    if (all_dead) {
+        if (e->pool->client_cert_set) {
             fprintf(stderr, "error: all connections failed with client cert configured\n");
-            uloop_end();
-            return;
+            exit(1);
+        }
+        if (e->pool->use_tls && !e->pool->ever_connected && e->retry_count >= 2) {
+            fprintf(stderr, "error: server likely requires client certificate (--client-cert)\n");
+            exit(1);
         }
     }
 
