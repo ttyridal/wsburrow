@@ -64,7 +64,8 @@ static void pong_timeout_cb(struct uloop_timeout *t)
         e->dead = 1;
         ws_client_destroy(e->ws);
         e->ws = NULL;
-        int delay = BACKOFF_BASE_MS << e->retry_count;
+        int shift = e->retry_count < 30 ? e->retry_count : 30;
+        int delay = BACKOFF_BASE_MS << shift;
         if (delay > BACKOFF_MAX_MS) delay = BACKOFF_MAX_MS;
         e->retry_count++;
         e->reconnect_count++;
@@ -175,30 +176,25 @@ static void pool_entry_on_connect(void *ctx)
 static void pool_entry_on_data(void *ctx, const void *data, int len)
 {
     struct pool_entry *e = (struct pool_entry *)ctx;
+    if (e->dead) return;
     e->rx_bytes += len;
-    struct tunnel_pool *pool = e->pool;
 
-    for (int i = 0; i < pool->pool_size; i++) {
-        if (pool->entries[i].ws != e->ws) continue;
-
-        if (!pool->entries[i].local) {
-            pool->entries[i].active = 1;
-            struct local_tcp_ops lops = {
-                .on_data = pool_entry_on_local_data,
-                .on_close = pool_entry_on_local_close,
-                .ctx = &pool->entries[i],
-            };
-            struct local_tcp *t = local_tcp_create(&lops);
-            if (t) {
-                pool->entries[i].local = t;
-                local_tcp_connect(t, pool->tcfg.dest_host,
-                                  pool->tcfg.dest_port);
-                local_tcp_send(t, data, len);
-            }
-        } else {
-            local_tcp_send(pool->entries[i].local, data, len);
+    if (!e->local) {
+        e->active = 1;
+        struct local_tcp_ops lops = {
+            .on_data = pool_entry_on_local_data,
+            .on_close = pool_entry_on_local_close,
+            .ctx = e,
+        };
+        struct local_tcp *t = local_tcp_create(&lops);
+        if (t) {
+            e->local = t;
+            local_tcp_connect(t, e->pool->tcfg.dest_host,
+                              e->pool->tcfg.dest_port);
+            local_tcp_send(t, data, len);
         }
-        return;
+    } else {
+        local_tcp_send(e->local, data, len);
     }
 }
 
@@ -208,7 +204,8 @@ static void pool_entry_on_close(void *ctx)
     uloop_timeout_cancel(&e->pong_timer);
     e->dead = 1;
 
-    int delay = BACKOFF_BASE_MS << e->retry_count;
+    int shift = e->retry_count < 30 ? e->retry_count : 30;
+    int delay = BACKOFF_BASE_MS << shift;
     if (delay > BACKOFF_MAX_MS) delay = BACKOFF_MAX_MS;
     e->retry_count++;
     e->reconnect_count++;
