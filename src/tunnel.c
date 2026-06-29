@@ -64,7 +64,7 @@ static void pong_timeout_cb(struct uloop_timeout *t)
         e->dead = 1;
         ws_client_destroy(e->ws);
         e->ws = NULL;
-        int shift = e->retry_count < 30 ? e->retry_count : 30;
+        int shift = e->retry_count < 5 ? e->retry_count : 5;
         int delay = BACKOFF_BASE_MS << shift;
         if (delay > BACKOFF_MAX_MS) delay = BACKOFF_MAX_MS;
         e->retry_count++;
@@ -91,7 +91,10 @@ static void pool_entry_on_pong(void *ctx)
 static void pool_entry_connect(struct tunnel_pool *pool, int idx)
 {
     struct pool_entry *e = &pool->entries[idx];
-    if (e->ws) ws_client_destroy(e->ws);
+    if (e->ws) {
+        uloop_timeout_cancel(&e->pong_timer);
+        ws_client_destroy(e->ws);
+    }
 
     struct ws_client_ops ops = {
         .on_connect = pool_entry_on_connect,
@@ -204,7 +207,7 @@ static void pool_entry_on_close(void *ctx)
     uloop_timeout_cancel(&e->pong_timer);
     e->dead = 1;
 
-    int shift = e->retry_count < 30 ? e->retry_count : 30;
+    int shift = e->retry_count < 5 ? e->retry_count : 5;
     int delay = BACKOFF_BASE_MS << shift;
     if (delay > BACKOFF_MAX_MS) delay = BACKOFF_MAX_MS;
     e->retry_count++;
