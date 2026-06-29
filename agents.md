@@ -96,9 +96,21 @@ All others (plain ws:// failures, TLS failures after successful connection) → 
 - v3 certs required: rustls rejects v1 certs with `UnsupportedCertVersion`
 - Generated via `openssl x509 -req -extfile /dev/stdin` with proper extensions (serverAuth SAN, clientAuth)
 
+## Fatal Exit Paths
+Three cases where wsburrow exits with code 1:
+
+1. **`--client-cert` configured + connection fails before any success** → `exit(1)` immediately (server rejected the cert)
+2. **wss://, no `--client-cert`, never connected, retry_count >= 2, all entries dead** → `exit(1)` (server likely requires mTLS)
+3. **`--client-cert` configured + all pool entries dead** → `exit(1)` (guarded by all_dead check)
+
+Note: `exit(1)` is used (not uloop_end) for fatal errors. OS handles cleanup. Graceful teardown would add complexity with no practical benefit for fatal error paths.
+
 ## Git History
-10 commits on master:
+14 commits on master:
 ```
+7ba2833 fix: code review — fd leak, error handling, data loss, parse bug
+6ab213a fix: proper ustream backpressure drain + remove 64KB stack buffer
+242e742 update plans
 e66df34 fix: exit immediately on first connection failure when client cert configured
 0ba5ac3 fix: fatal exit when server requires client cert but none configured
 b565120 feat: TLS stage 2 -- client certificate support with mTLS tests
