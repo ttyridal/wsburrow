@@ -109,8 +109,13 @@ static void pool_entry_connect(struct tunnel_pool *pool, int idx)
     e->pong_timer.cb = pong_timeout_cb;
     e->reconnect_timer.cb = entry_reconnect_cb;
 
-    ws_client_connect(e->ws, pool->server_host, pool->server_port,
-                      "/v1/events", e->jwt);
+    if (ws_client_connect(e->ws, pool->server_host, pool->server_port,
+                          "/v1/events", e->jwt) != 0) {
+        ws_client_destroy(e->ws);
+        e->ws = NULL;
+        e->dead = 1;
+        uloop_timeout_set(&e->reconnect_timer, BACKOFF_BASE_MS);
+    }
 }
 
 static void ping_cb(struct uloop_timeout *t)
