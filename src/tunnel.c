@@ -59,7 +59,8 @@ static void pool_entry_on_connect(void *ctx);
 static void pool_entry_on_data(void *ctx, const void *data, int len);
 static void pool_entry_on_close(void *ctx);
 static void pool_entry_on_local_close(void *ctx);
-static void pool_entry_on_local_data(void *ctx, const void *data, int len);
+static int pool_entry_on_local_data(void *ctx, const void *data, int len);
+static void pool_entry_on_flush(void *ctx);
 static void pool_entry_connect(struct tunnel_pool *pool, int idx);
 
 static void pong_timeout_cb(struct uloop_timeout *t)
@@ -106,6 +107,7 @@ static void pool_entry_connect(struct tunnel_pool *pool, int idx)
         .on_data = pool_entry_on_data,
         .on_close = pool_entry_on_close,
         .on_pong = pool_entry_on_pong,
+        .on_flush = pool_entry_on_flush,
         .ctx = e,
     };
     e->ws = ws_client_create(pool->lwsc, &ops);
@@ -184,11 +186,30 @@ void tunnel_pool_destroy(struct tunnel_pool *pool)
     free(pool);
 }
 
+static void pool_entry_on_flush(void *ctx);
+static void pool_entry_on_local_connect(void *ctx);
+
 static void pool_entry_on_connect(void *ctx)
 {
     struct pool_entry *e = (struct pool_entry *)ctx;
     e->pool->ever_connected = 1;
     e->retry_count = 0;
+
+    if (!e->local) {
+        struct local_tcp_ops lops = {
+            .on_data = pool_entry_on_local_data,
+            .on_close = pool_entry_on_local_close,
+            .ctx = e,
+        };
+        e->local = local_tcp_create(&lops);
+        if (e->local) {
+            if (local_tcp_connect(e->local, e->pool->tcfg.dest_host,
+                                  e->pool->tcfg.dest_port) != 0) {
+                local_tcp_destroy(e->local);
+                e->local = NULL;
+            }
+        }
+    }
 }
 
 static void pool_entry_on_data(void *ctx, const void *data, int len)
@@ -196,24 +217,8 @@ static void pool_entry_on_data(void *ctx, const void *data, int len)
     struct pool_entry *e = (struct pool_entry *)ctx;
     if (e->dead) return;
     e->rx_bytes += len;
-
-    if (!e->local) {
-        e->active = 1;
-        struct local_tcp_ops lops = {
-            .on_data = pool_entry_on_local_data,
-            .on_close = pool_entry_on_local_close,
-            .ctx = e,
-        };
-        struct local_tcp *t = local_tcp_create(&lops);
-        if (t) {
-            e->local = t;
-            local_tcp_connect(t, e->pool->tcfg.dest_host,
-                              e->pool->tcfg.dest_port);
-            local_tcp_send(t, data, len);
-        }
-    } else {
+    if (e->local)
         local_tcp_send(e->local, data, len);
-    }
 }
 
 static void pool_entry_on_close(void *ctx)
@@ -255,10 +260,24 @@ static void pool_entry_on_local_close(void *ctx)
     e->active = 0;
 }
 
-static void pool_entry_on_local_data(void *ctx, const void *data, int len)
+static void pool_entry_on_flush(void *ctx)
 {
     struct pool_entry *e = (struct pool_entry *)ctx;
-    e->tx_bytes += len;
-    if (e->ws)
-        ws_client_enqueue(e->ws, data, len);
+    if (e->local) {
+        local_tcp_drain(e->local);
+        local_tcp_read_blocked(e->local, 0);
+    }
+}
+
+static int pool_entry_on_local_data(void *ctx, const void *data, int len)
+{
+    struct pool_entry *e = (struct pool_entry *)ctx;
+    if (e->ws) {
+        int n = ws_client_enqueue(e->ws, data, len);
+        e->tx_bytes += n;
+        if (n < len && e->local)
+            local_tcp_read_blocked(e->local, 1);
+        return n;
+    }
+    return 0;
 }

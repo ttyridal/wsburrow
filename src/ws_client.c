@@ -3,7 +3,7 @@
 #include <string.h>
 #include <stdio.h>
 
-#define PENDING_MAX 65536
+#define PENDING_MAX 4096
 
 struct ws_client {
     struct lws_context *lwsc;
@@ -65,15 +65,6 @@ int ws_client_connect(struct ws_client *c, const char *host, int port,
 
     c->wsi = lws_client_connect_via_info(&ci);
     return c->wsi ? 0 : -1;
-}
-
-int ws_client_send(struct ws_client *c, const void *data, int len)
-{
-    if (!c->wsi || c->closing) return -1;
-    unsigned char buf[LWS_PRE + PENDING_MAX];
-    if (len > PENDING_MAX) len = PENDING_MAX;
-    memcpy(buf + LWS_PRE, data, len);
-    return lws_write(c->wsi, buf + LWS_PRE, len, LWS_WRITE_BINARY);
 }
 
 int ws_client_enqueue(struct ws_client *c, const void *data, int len)
@@ -153,8 +144,11 @@ int wsburrow_callback(struct lws *wsi, enum lws_callback_reasons reason,
                             c2->pending + LWS_PRE + n, rem);
                 c2->pending_len = rem;
             }
-            if (c2->pending_len > 0)
+            if (c2->pending_len > 0) {
                 lws_callback_on_writable(wsi);
+            } else if (c2->ops.on_flush) {
+                c2->ops.on_flush(c2->ops.ctx);
+            }
         }
         break;
     }

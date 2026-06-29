@@ -14,6 +14,7 @@ struct ws_client_ops {
     void (*on_data)(void *ctx, const void *data, int len);
     void (*on_close)(void *ctx);
     void (*on_pong)(void *ctx);
+    void (*on_flush)(void *ctx);
     void *ctx;
 };
 
@@ -22,7 +23,6 @@ struct ws_client *ws_client_create(struct lws_context *lwsc,
 int ws_client_connect(struct ws_client *c, const char *host, int port,
                        const char *path, const char *jwt,
                        int use_tls, int insecure);
-int ws_client_send(struct ws_client *c, const void *data, int len);
 int ws_client_enqueue(struct ws_client *c, const void *data, int len);
 int ws_client_ping(struct ws_client *c);
 void ws_client_request_write(struct ws_client *c);

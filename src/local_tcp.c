@@ -14,7 +14,7 @@ struct local_tcp {
     struct uloop_fd connect_fd;
     int connecting;
     int closing;
-    unsigned char pending[65536];
+    unsigned char pending[4096];
     int pending_len;
 };
 
@@ -27,9 +27,15 @@ static void tcp_read_cb(struct ustream *s, int bytes)
 
     int len;
     char *buf = ustream_get_read_buf(s, &len);
-    if (buf && len > 0 && t->ops.on_data)
-        t->ops.on_data(t->ops.ctx, buf, len);
-    ustream_consume(s, len);
+    if (buf && len > 0) {
+        if (t->ops.on_data) {
+            int consumed = t->ops.on_data(t->ops.ctx, buf, len);
+            if (consumed > 0)
+                ustream_consume(s, consumed);
+        } else {
+            ustream_consume(s, len);
+        }
+    }
 }
 
 static void tcp_state_cb(struct ustream *s)
@@ -39,6 +45,7 @@ static void tcp_state_cb(struct ustream *s)
     if (!t) return;
 
     if (s->eof || s->write_error) {
+        local_tcp_drain(t);
         if (t->ops.on_close)
             t->ops.on_close(t->ops.ctx);
     }
@@ -109,6 +116,31 @@ int local_tcp_send(struct local_tcp *t, const void *data, int len)
         return len;
     }
     return ustream_write(&t->s_fd.stream, data, len, 0);
+}
+
+void local_tcp_read_blocked(struct local_tcp *t, int blocked)
+{
+    if (t->closing) return;
+    ustream_set_read_blocked(&t->s_fd.stream, blocked);
+}
+
+void local_tcp_drain(struct local_tcp *t)
+{
+    if (t->closing) return;
+    struct ustream *s = &t->s_fd.stream;
+    int len;
+    char *buf;
+    while ((buf = ustream_get_read_buf(s, &len)) && len > 0) {
+        if (t->ops.on_data) {
+            int consumed = t->ops.on_data(t->ops.ctx, buf, len);
+            if (consumed > 0)
+                ustream_consume(s, consumed);
+            else
+                break;
+        } else {
+            ustream_consume(s, len);
+        }
+    }
 }
 
 void local_tcp_destroy(struct local_tcp *t)
