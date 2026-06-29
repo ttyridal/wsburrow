@@ -174,6 +174,11 @@ int wsburrow_callback(struct lws *wsi, enum lws_callback_reasons reason,
     case LWS_CALLBACK_CLIENT_FILTER_PRE_ESTABLISH:
         break;
 
+    case LWS_CALLBACK_CLIENT_RECEIVE_PONG:
+        if (c && c->ops.on_pong)
+            c->ops.on_pong(c->ops.ctx);
+        break;
+
     default:
         break;
     }

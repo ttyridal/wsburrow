@@ -13,6 +13,7 @@ struct ws_client_ops {
     void (*on_connect)(void *ctx);
     void (*on_data)(void *ctx, const void *data, int len);
     void (*on_close)(void *ctx);
+    void (*on_pong)(void *ctx);
     void *ctx;
 };
 
