@@ -8,6 +8,9 @@
 #include <libubox/list.h>
 
 #define MAX_POOL 32
+#define PONG_TIMEOUT_MS  8000
+#define BACKOFF_BASE_MS  1000
+#define BACKOFF_MAX_MS   30000
 
 struct pool_entry {
     struct tunnel_pool *pool;
@@ -16,6 +19,12 @@ struct pool_entry {
     int active;
     int dead;
     char jwt[512];
+    struct uloop_timeout pong_timer;
+    struct uloop_timeout reconnect_timer;
+    int retry_count;
+    unsigned long rx_bytes;
+    unsigned long tx_bytes;
+    unsigned long reconnect_count;
 };
 
 struct tunnel_pool {
@@ -27,8 +36,6 @@ struct tunnel_pool {
     int ping_interval;
     struct pool_entry entries[MAX_POOL];
     struct uloop_timeout ping_timer;
-    struct uloop_timeout reconnect_timer;
-    int reconnecting;
 };
 
 static const struct lws_protocols tunnel_protocols[] = {
@@ -42,11 +49,43 @@ const struct lws_protocols *tunnel_get_protocols(void)
     return tunnel_protocols;
 }
 
+static void pool_entry_on_pong(void *ctx);
 static void pool_entry_on_connect(void *ctx);
 static void pool_entry_on_data(void *ctx, const void *data, int len);
 static void pool_entry_on_close(void *ctx);
 static void pool_entry_on_local_close(void *ctx);
 static void pool_entry_on_local_data(void *ctx, const void *data, int len);
+static void pool_entry_connect(struct tunnel_pool *pool, int idx);
+
+static void pong_timeout_cb(struct uloop_timeout *t)
+{
+    struct pool_entry *e = container_of(t, struct pool_entry, pong_timer);
+    if (e->ws) {
+        e->dead = 1;
+        ws_client_destroy(e->ws);
+        e->ws = NULL;
+        int delay = BACKOFF_BASE_MS << e->retry_count;
+        if (delay > BACKOFF_MAX_MS) delay = BACKOFF_MAX_MS;
+        e->retry_count++;
+        e->reconnect_count++;
+        uloop_timeout_set(&e->reconnect_timer, delay);
+    }
+}
+
+static void entry_reconnect_cb(struct uloop_timeout *t)
+{
+    struct pool_entry *e = container_of(t, struct pool_entry, reconnect_timer);
+    e->dead = 0;
+    struct tunnel_pool *pool = e->pool;
+    int idx = e - pool->entries;
+    pool_entry_connect(pool, idx);
+}
+
+static void pool_entry_on_pong(void *ctx)
+{
+    struct pool_entry *e = (struct pool_entry *)ctx;
+    uloop_timeout_cancel(&e->pong_timer);
+}
 
 static void pool_entry_connect(struct tunnel_pool *pool, int idx)
 {
@@ -57,6 +96,7 @@ static void pool_entry_connect(struct tunnel_pool *pool, int idx)
         .on_connect = pool_entry_on_connect,
         .on_data = pool_entry_on_data,
         .on_close = pool_entry_on_close,
+        .on_pong = pool_entry_on_pong,
         .ctx = e,
     };
     e->ws = ws_client_create(pool->lwsc, &ops);
@@ -70,22 +110,12 @@ static void ping_cb(struct uloop_timeout *t)
 {
     struct tunnel_pool *pool = container_of(t, struct tunnel_pool, ping_timer);
     for (int i = 0; i < pool->pool_size; i++) {
-        if (pool->entries[i].ws)
+        if (pool->entries[i].ws) {
             ws_client_ping(pool->entries[i].ws);
-    }
-    uloop_timeout_set(t, pool->ping_interval * 1000);
-}
-
-static void reconnect_cb(struct uloop_timeout *t)
-{
-    struct tunnel_pool *pool = container_of(t, struct tunnel_pool, reconnect_timer);
-    pool->reconnecting = 0;
-    for (int i = 0; i < pool->pool_size; i++) {
-        if (pool->entries[i].dead || !pool->entries[i].ws) {
-            pool->entries[i].dead = 0;
-            pool_entry_connect(pool, i);
+            uloop_timeout_set(&pool->entries[i].pong_timer, PONG_TIMEOUT_MS);
         }
     }
+    uloop_timeout_set(t, pool->ping_interval * 1000);
 }
 
 struct tunnel_pool *tunnel_pool_create(struct lws_context *lwsc,
@@ -122,8 +152,9 @@ void tunnel_pool_destroy(struct tunnel_pool *pool)
 {
     if (!pool) return;
     uloop_timeout_cancel(&pool->ping_timer);
-    uloop_timeout_cancel(&pool->reconnect_timer);
     for (int i = 0; i < pool->pool_size; i++) {
+        uloop_timeout_cancel(&pool->entries[i].pong_timer);
+        uloop_timeout_cancel(&pool->entries[i].reconnect_timer);
         if (pool->entries[i].local)
             local_tcp_destroy(pool->entries[i].local);
         if (pool->entries[i].ws)
@@ -135,12 +166,13 @@ void tunnel_pool_destroy(struct tunnel_pool *pool)
 static void pool_entry_on_connect(void *ctx)
 {
     struct pool_entry *e = (struct pool_entry *)ctx;
-    (void)e;
+    e->retry_count = 0;
 }
 
 static void pool_entry_on_data(void *ctx, const void *data, int len)
 {
     struct pool_entry *e = (struct pool_entry *)ctx;
+    e->rx_bytes += len;
     struct tunnel_pool *pool = e->pool;
 
     for (int i = 0; i < pool->pool_size; i++) {
@@ -170,14 +202,14 @@ static void pool_entry_on_data(void *ctx, const void *data, int len)
 static void pool_entry_on_close(void *ctx)
 {
     struct pool_entry *e = (struct pool_entry *)ctx;
+    uloop_timeout_cancel(&e->pong_timer);
     e->dead = 1;
 
-    struct tunnel_pool *pool = e->pool;
-    if (!pool->reconnecting) {
-        pool->reconnecting = 1;
-        pool->reconnect_timer.cb = reconnect_cb;
-        uloop_timeout_set(&pool->reconnect_timer, 1000);
-    }
+    int delay = BACKOFF_BASE_MS << e->retry_count;
+    if (delay > BACKOFF_MAX_MS) delay = BACKOFF_MAX_MS;
+    e->retry_count++;
+    e->reconnect_count++;
+    uloop_timeout_set(&e->reconnect_timer, delay);
 }
 
 static void pool_entry_on_local_close(void *ctx)
@@ -191,6 +223,7 @@ static void pool_entry_on_local_close(void *ctx)
 static void pool_entry_on_local_data(void *ctx, const void *data, int len)
 {
     struct pool_entry *e = (struct pool_entry *)ctx;
+    e->tx_bytes += len;
     if (e->ws)
         ws_client_enqueue(e->ws, data, len);
 }
