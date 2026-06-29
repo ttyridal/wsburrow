@@ -222,16 +222,17 @@ static void pool_entry_on_close(void *ctx)
     uloop_timeout_cancel(&e->pong_timer);
     e->dead = 1;
 
+    if (e->pool->client_cert_set && !e->pool->ever_connected) {
+        fprintf(stderr, "error: connection failed with client cert configured\n");
+        exit(1);
+    }
+
     int all_dead = 1;
     for (int i = 0; i < e->pool->pool_size; i++)
         if (!e->pool->entries[i].dead)
             all_dead = 0;
 
     if (all_dead) {
-        if (e->pool->client_cert_set) {
-            fprintf(stderr, "error: all connections failed with client cert configured\n");
-            exit(1);
-        }
         if (e->pool->use_tls && !e->pool->ever_connected && e->retry_count >= 2) {
             fprintf(stderr, "error: server likely requires client certificate (--client-cert)\n");
             exit(1);
