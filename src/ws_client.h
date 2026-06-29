@@ -20,7 +20,8 @@ struct ws_client_ops {
 struct ws_client *ws_client_create(struct lws_context *lwsc,
                                     const struct ws_client_ops *ops);
 int ws_client_connect(struct ws_client *c, const char *host, int port,
-                       const char *path, const char *jwt);
+                       const char *path, const char *jwt,
+                       int use_tls, int insecure);
 int ws_client_send(struct ws_client *c, const void *data, int len);
 int ws_client_enqueue(struct ws_client *c, const void *data, int len);
 int ws_client_ping(struct ws_client *c);

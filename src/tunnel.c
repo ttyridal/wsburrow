@@ -34,6 +34,8 @@ struct tunnel_pool {
     int server_port;
     int pool_size;
     int ping_interval;
+    int use_tls;
+    int insecure;
     struct pool_entry entries[MAX_POOL];
     struct uloop_timeout ping_timer;
 };
@@ -110,7 +112,8 @@ static void pool_entry_connect(struct tunnel_pool *pool, int idx)
     e->reconnect_timer.cb = entry_reconnect_cb;
 
     if (ws_client_connect(e->ws, pool->server_host, pool->server_port,
-                          "/v1/events", e->jwt) != 0) {
+                          "/v1/events", e->jwt,
+                          pool->use_tls, pool->insecure) != 0) {
         ws_client_destroy(e->ws);
         e->ws = NULL;
         e->dead = 1;
@@ -143,6 +146,8 @@ struct tunnel_pool *tunnel_pool_create(struct lws_context *lwsc,
     pool->server_port = cfg->server_port;
     pool->pool_size = cfg->pool_size;
     pool->ping_interval = cfg->ping_interval;
+    pool->use_tls = cfg->use_tls;
+    pool->insecure = cfg->insecure;
     if (pool->pool_size > MAX_POOL) pool->pool_size = MAX_POOL;
 
     char jwt[512];

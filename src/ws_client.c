@@ -30,7 +30,8 @@ struct ws_client *ws_client_create(struct lws_context *lwsc,
 }
 
 int ws_client_connect(struct ws_client *c, const char *host, int port,
-                       const char *path, const char *jwt)
+                       const char *path, const char *jwt,
+                       int use_tls, int insecure)
 {
     strncpy(c->host, host, sizeof(c->host) - 1);
     c->port = port;
@@ -53,7 +54,14 @@ int ws_client_connect(struct ws_client *c, const char *host, int port,
     ci.protocol = proto;
     ci.ietf_version_or_minus_one = -1;
     ci.opaque_user_data = c;
-    ci.ssl_connection = 0;
+    if (use_tls) {
+        ci.ssl_connection = LCCSCF_USE_SSL;
+        if (insecure)
+            ci.ssl_connection |= LCCSCF_ALLOW_SELFSIGNED |
+                                 LCCSCF_SKIP_SERVER_CERT_HOSTNAME_CHECK |
+                                 LCCSCF_ALLOW_EXPIRED |
+                                 LCCSCF_ALLOW_INSECURE;
+    }
 
     c->wsi = lws_client_connect_via_info(&ci);
     return c->wsi ? 0 : -1;

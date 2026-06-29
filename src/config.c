@@ -113,6 +113,8 @@ int config_parse(struct config *cfg, int argc, char **argv)
             if (i >= argc) return -1;
             cfg->ping_interval = atoi(argv[i]);
             if (cfg->ping_interval < 1) return -1;
+        } else if (strcmp(argv[i], "--insecure") == 0) {
+            cfg->insecure = 1;
         } else if (argv[i][0] != '-') {
             if (parse_url(cfg, argv[i]) != 0) return -1;
         } else {

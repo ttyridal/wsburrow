@@ -19,6 +19,7 @@ struct config {
 
     int  pool_size;
     int  ping_interval;
+    int  insecure;
 
     int  num_tunnels;
     struct tunnel_cfg tunnels[MAX_TUNNELS];

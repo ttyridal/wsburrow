@@ -299,6 +299,48 @@ def test_multiple_tunnels(manager):
     return True
 
 
+def test_tls_roundtrip(manager):
+    """Test basic roundtrip over wss:// with --insecure."""
+    import tempfile, shutil
+    tmpdir = tempfile.mkdtemp()
+    cert_file = os.path.join(tmpdir, "cert.pem")
+    key_file = os.path.join(tmpdir, "key.pem")
+    subprocess.run(
+        ["openssl", "req", "-x509", "-newkey", "rsa:2048", "-keyout", key_file,
+         "-out", cert_file, "-days", "1", "-nodes",
+         "-subj", "/CN=localhost"],
+        capture_output=True, check=True,
+    )
+
+    base = 20
+    stop = threading.Event()
+    srv = threading.Thread(target=serve_http, args=("0.0.0.0", HTTP_PORT + base, stop), daemon=True)
+    srv.start()
+    time.sleep(0.3)
+
+    wss_port = WS_PORT + base
+    manager.start(
+        [WSTUNNEL, "server", f"wss://0.0.0.0:{wss_port}", "--websocket-mask-frame",
+         "--tls-certificate", cert_file, "--tls-private-key", key_file,
+         "--log-lvl", "error"],
+        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+    )
+    time.sleep(3)
+
+    manager.start(
+        [WSBURROW, "-R", f"tcp://{TUNNEL_PORT + base}:localhost:{HTTP_PORT + base}",
+         f"wss://localhost:{wss_port}", "--insecure", "--pool-size", "1"],
+        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+    )
+    time.sleep(6)
+
+    data = tcp_send_recv("localhost", TUNNEL_PORT + base, b"GET / HTTP/1.0\r\n\r\n")
+    assert b"hello" in data, f"Expected 'hello' in response, got: {data}"
+    shutil.rmtree(tmpdir, ignore_errors=True)
+    log("PASS: test_tls_roundtrip")
+    return True
+
+
 def test_invalid_url_exits(manager):
     """Verify wsburrow exits with code 1 on invalid URL."""
     result = subprocess.run(
@@ -332,6 +374,7 @@ def main():
         ("pool_size", test_pool_size),
         ("ping_keepalive", test_ping_keepalive),
         ("multiple_tunnels", test_multiple_tunnels),
+        ("tls_roundtrip", test_tls_roundtrip),
         ("invalid_url_exits", test_invalid_url_exits),
         ("unreachable_server", test_unreachable_server),
     ]

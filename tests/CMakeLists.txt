@@ -16,5 +16,5 @@ find_package(Python3 COMPONENTS Interpreter QUIET)
 if(Python3_FOUND)
     add_test(NAME test_integration
         COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/test_integration.py)
-    set_tests_properties(test_integration PROPERTIES TIMEOUT 120)
+    set_tests_properties(test_integration PROPERTIES TIMEOUT 200)
 endif()
