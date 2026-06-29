@@ -40,21 +40,26 @@ After `struct lws_context_creation_info info = { 0 };`, set:
     info.client_ssl_private_key_filepath = cfg->client_key[0] ? cfg->client_key : NULL;
 ```
 
-### Error handling
+### Error handling (actual implementation)
 
-Server rejecting client cert → TLS alert during handshake → `LWS_CALLBACK_CLIENT_CONNECTION_ERROR` callback. In `pool_entry_on_close`, check if `--client-cert` was provided; if so, treat all pool entries failing as fatal → exit. Simpler approach: if any connection fails with client cert configured, print error and exit immediately in `pool_entry_on_close`.
+Three fatal exit paths in `pool_entry_on_close` in `src/tunnel.c`:
+
+1. **Client cert configured, never connected:** `--client-cert` is set and `!ever_connected` → `exit(1)` immediately on first connection failure. Covers server rejecting the client cert.
+2. **No client cert, TLS, never connected:** `use_tls && !client_cert_set && !ever_connected && retry_count >= 2` → `exit(1)` after 3 failed retry cycles (~3s). Covers server requiring mTLS when wsburrow has no cert.
+3. **All entries dead with client cert:** `client_cert_set && all_dead` → `exit(1)`. Safety net in case path #1 doesn't trigger (e.g., transient failure recovered then all entries die later).
+
+Key design: `ever_connected` flag on `tunnel_pool` is set true when any pool entry successfully connects. `exit(1)` is used instead of `uloop_end()` to ensure non-zero exit code.
 
 ### ws_client.c/h
 
 No changes needed — lws handles cert presentation internally when context is configured.
 
-## Test
+## Test (actual implementation)
 
-Add `test_mtls_roundtrip` integration test:
-1. Generate CA key/cert, server cert signed by CA, client cert signed by CA
-2. Start wstunnel with `--tls-certificate`, `--tls-private-key`, `--tls-client-ca-certs <ca-cert>`
-3. Connect wsburrow with `wss://`, `--client-cert`, `--client-key`
-4. Verify data round-trips
+`tests/test_integration.py` has a `_gen_ca_chain()` helper that generates CA + server + client cert chain. **Important: v3 certs required.** Rustls (wstunnel's TLS library) rejects v1 certs with `UnsupportedCertVersion`. Use `openssl x509 -req -extfile /dev/stdin` with proper extensions to force v3.
 
-Add `test_mtls_rejected` negative test:
-1. Same setup but without `--client-cert` → connection fails, wsburrow exits non-zero
+Two mTLS tests added:
+
+1. **`test_mtls_roundtrip`** — Generate CA chain (v3), start wstunnel with `--tls-certificate`, `--tls-private-key`, `--tls-client-ca-certs`, connect wsburrow with `wss://`, `--client-cert`, `--client-key`. Verify data round-trips. Uses base=40 port offset.
+
+2. **`test_mtls_rejected`** — Same wstunnel setup but wsburrow omits `--client-cert` → connection fails during TLS → exits non-zero after 3 retry cycles. Uses base=41 port offset.
