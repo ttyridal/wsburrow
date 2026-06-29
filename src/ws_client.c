@@ -102,6 +102,7 @@ void ws_client_destroy(struct ws_client *c)
     if (c->wsi) {
         c->closing = 1;
         lws_set_opaque_user_data(c->wsi, NULL);
+        lws_wsi_close(c->wsi, LWS_TO_KILL_ASYNC);
     }
     free(c);
 }

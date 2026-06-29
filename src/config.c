@@ -3,6 +3,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <ctype.h>
+#include <limits.h>
 
 static int parse_url(struct config *cfg, const char *url)
 {
@@ -30,6 +31,14 @@ static int parse_url(struct config *cfg, const char *url)
     if (cfg->server_port <= 0 || cfg->server_port > 65535) return -1;
 
     return 0;
+}
+
+static int valid_bind_addr(const char *s)
+{
+    for (; *s; s++)
+        if (!isalnum((unsigned char)*s) && *s != '.' && *s != '-')
+            return 0;
+    return 1;
 }
 
 static int is_ipv4(const char *s)
@@ -76,7 +85,7 @@ static int parse_reverse_tunnel(struct config *cfg, const char *arg)
             strncpy(t->bind_addr, parts[0], sizeof(t->bind_addr) - 1);
             t->bind_port = atoi(parts[1]);
             strncpy(t->dest_host, parts[2], sizeof(t->dest_host) - 1);
-            t->dest_port = atoi(parts[2]);
+            t->dest_port = t->bind_port;
         } else {
             strncpy(t->bind_addr, "127.0.0.1", sizeof(t->bind_addr) - 1);
             t->bind_port = atoi(parts[0]);
@@ -84,6 +93,8 @@ static int parse_reverse_tunnel(struct config *cfg, const char *arg)
             t->dest_port = atoi(parts[2]);
         }
     }
+
+    if (!valid_bind_addr(t->bind_addr)) return -1;
 
     if (t->bind_port <= 0 || t->bind_port > 65535) return -1;
     if (t->dest_port <= 0 || t->dest_port > 65535) return -1;
@@ -112,7 +123,7 @@ int config_parse(struct config *cfg, int argc, char **argv)
             i++;
             if (i >= argc) return -1;
             cfg->ping_interval = atoi(argv[i]);
-            if (cfg->ping_interval < 1) return -1;
+            if (cfg->ping_interval < 1 || cfg->ping_interval > INT_MAX / 1000) return -1;
         } else if (strcmp(argv[i], "--insecure") == 0) {
             cfg->insecure = 1;
         } else if (strcmp(argv[i], "--client-cert") == 0) {

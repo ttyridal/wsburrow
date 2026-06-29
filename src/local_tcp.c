@@ -120,13 +120,13 @@ int local_tcp_send(struct local_tcp *t, const void *data, int len)
 
 void local_tcp_read_blocked(struct local_tcp *t, int blocked)
 {
-    if (t->closing) return;
+    if (t->closing || t->connecting) return;
     ustream_set_read_blocked(&t->s_fd.stream, blocked);
 }
 
 void local_tcp_drain(struct local_tcp *t)
 {
-    if (t->closing) return;
+    if (t->closing || t->connecting) return;
     struct ustream *s = &t->s_fd.stream;
     int len;
     char *buf;
@@ -147,9 +147,12 @@ void local_tcp_destroy(struct local_tcp *t)
 {
     if (!t) return;
     t->closing = 1;
-    if (t->connecting)
+    if (t->connecting) {
         uloop_fd_delete(&t->connect_fd);
-    else
+        if (t->connect_fd.fd >= 0)
+            close(t->connect_fd.fd);
+    } else {
         ustream_free(&t->s_fd.stream);
+    }
     free(t);
 }

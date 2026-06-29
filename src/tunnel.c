@@ -17,7 +17,6 @@ struct pool_entry {
     struct tunnel_pool *pool;
     struct ws_client *ws;
     struct local_tcp *local;
-    int active;
     int dead;
     char jwt[512];
     struct uloop_timeout pong_timer;
@@ -157,7 +156,11 @@ struct tunnel_pool *tunnel_pool_create(struct lws_context *lwsc,
     if (pool->pool_size > MAX_POOL) pool->pool_size = MAX_POOL;
 
     char jwt[512];
-    jwt_encode_reverse_tcp(tcfg->bind_addr, tcfg->bind_port, jwt, sizeof(jwt));
+    if (jwt_encode_reverse_tcp(tcfg->bind_addr, tcfg->bind_port,
+                               jwt, sizeof(jwt)) != 0) {
+        free(pool);
+        return NULL;
+    }
 
     for (int i = 0; i < pool->pool_size; i++) {
         pool->entries[i].pool = pool;
@@ -186,9 +189,6 @@ void tunnel_pool_destroy(struct tunnel_pool *pool)
     free(pool);
 }
 
-static void pool_entry_on_flush(void *ctx);
-static void pool_entry_on_local_connect(void *ctx);
-
 static void pool_entry_on_connect(void *ctx)
 {
     struct pool_entry *e = (struct pool_entry *)ctx;
@@ -207,6 +207,12 @@ static void pool_entry_on_connect(void *ctx)
                                   e->pool->tcfg.dest_port) != 0) {
                 local_tcp_destroy(e->local);
                 e->local = NULL;
+                if (e->ws) {
+                    ws_client_destroy(e->ws);
+                    e->ws = NULL;
+                }
+                e->dead = 1;
+                uloop_timeout_set(&e->reconnect_timer, BACKOFF_BASE_MS);
             }
         }
     }
@@ -217,6 +223,17 @@ static void pool_entry_on_data(void *ctx, const void *data, int len)
     struct pool_entry *e = (struct pool_entry *)ctx;
     if (e->dead) return;
     e->rx_bytes += len;
+    if (!e->local) {
+        struct local_tcp_ops lops = {
+            .on_data = pool_entry_on_local_data,
+            .on_close = pool_entry_on_local_close,
+            .ctx = e,
+        };
+        e->local = local_tcp_create(&lops);
+        if (e->local)
+            local_tcp_connect(e->local, e->pool->tcfg.dest_host,
+                              e->pool->tcfg.dest_port);
+    }
     if (e->local)
         local_tcp_send(e->local, data, len);
 }
@@ -227,17 +244,16 @@ static void pool_entry_on_close(void *ctx)
     uloop_timeout_cancel(&e->pong_timer);
     e->dead = 1;
 
-    if (e->pool->client_cert_set && !e->pool->ever_connected) {
-        fprintf(stderr, "error: connection failed with client cert configured\n");
-        exit(1);
-    }
-
     int all_dead = 1;
     for (int i = 0; i < e->pool->pool_size; i++)
         if (!e->pool->entries[i].dead)
             all_dead = 0;
 
     if (all_dead) {
+        if (e->pool->client_cert_set && !e->pool->ever_connected) {
+            fprintf(stderr, "error: connection failed with client cert configured\n");
+            exit(1);
+        }
         if (e->pool->use_tls && !e->pool->ever_connected && e->retry_count >= 2) {
             fprintf(stderr, "error: server likely requires client certificate (--client-cert)\n");
             exit(1);
@@ -257,7 +273,6 @@ static void pool_entry_on_local_close(void *ctx)
     struct pool_entry *e = (struct pool_entry *)ctx;
     local_tcp_destroy(e->local);
     e->local = NULL;
-    e->active = 0;
 }
 
 static void pool_entry_on_flush(void *ctx)
@@ -272,12 +287,15 @@ static void pool_entry_on_flush(void *ctx)
 static int pool_entry_on_local_data(void *ctx, const void *data, int len)
 {
     struct pool_entry *e = (struct pool_entry *)ctx;
-    if (e->ws) {
-        int n = ws_client_enqueue(e->ws, data, len);
-        e->tx_bytes += n;
-        if (n < len && e->local)
+    if (!e->ws) {
+        if (e->local)
             local_tcp_read_blocked(e->local, 1);
-        return n;
+        return 0;
     }
-    return 0;
+    int n = ws_client_enqueue(e->ws, data, len);
+    if (n > 0)
+        e->tx_bytes += n;
+    if (n >= 0 && n < len && e->local)
+        local_tcp_read_blocked(e->local, 1);
+    return n > 0 ? n : 0;
 }
