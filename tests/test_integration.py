@@ -341,6 +341,132 @@ def test_tls_roundtrip(manager):
     return True
 
 
+def _gen_ca_chain(tmpdir):
+    """Generate CA, server cert signed by CA, client cert signed by CA.
+    Returns (ca_cert, server_cert, server_key, client_cert, client_key).
+    """
+    import subprocess as sp
+
+    # CA
+    sp.run(["openssl", "req", "-x509", "-newkey", "rsa:2048", "-keyout",
+            os.path.join(tmpdir, "ca-key.pem"), "-out", os.path.join(tmpdir, "ca-cert.pem"),
+            "-days", "1", "-nodes", "-subj", "/CN=TestCA"],
+           capture_output=True, check=True)
+
+    # Server CSR + cert (use -extfile to force v3; rustls rejects v1 certs)
+    sp.run(["openssl", "req", "-newkey", "rsa:2048", "-keyout",
+            os.path.join(tmpdir, "srv-key.pem"), "-out", os.path.join(tmpdir, "srv.csr"),
+            "-nodes", "-subj", "/CN=localhost"],
+           capture_output=True, check=True)
+    sp.run(["openssl", "x509", "-req", "-in", os.path.join(tmpdir, "srv.csr"),
+            "-CA", os.path.join(tmpdir, "ca-cert.pem"),
+            "-CAkey", os.path.join(tmpdir, "ca-key.pem"),
+            "-CAcreateserial", "-out", os.path.join(tmpdir, "srv-cert.pem"),
+            "-days", "1",
+            "-extfile", "/dev/stdin"],
+           input=b"basicConstraints = CA:FALSE\nkeyUsage = digitalSignature, keyEncipherment\nextendedKeyUsage = serverAuth\nsubjectAltName = DNS:localhost\n",
+           capture_output=True, check=True)
+
+    # Client CSR + cert (CN=v1 to match wstunnel's mTLS upgrade path restriction)
+    sp.run(["openssl", "req", "-newkey", "rsa:2048", "-keyout",
+            os.path.join(tmpdir, "cli-key.pem"), "-out", os.path.join(tmpdir, "cli.csr"),
+            "-nodes", "-subj", "/CN=v1"],
+           capture_output=True, check=True)
+    sp.run(["openssl", "x509", "-req", "-in", os.path.join(tmpdir, "cli.csr"),
+            "-CA", os.path.join(tmpdir, "ca-cert.pem"),
+            "-CAkey", os.path.join(tmpdir, "ca-key.pem"),
+            "-CAcreateserial", "-out", os.path.join(tmpdir, "cli-cert.pem"),
+            "-days", "1",
+            "-extfile", "/dev/stdin"],
+           input=b"basicConstraints = CA:FALSE\nkeyUsage = digitalSignature, keyEncipherment\nextendedKeyUsage = clientAuth\n",
+           capture_output=True, check=True)
+
+    return (os.path.join(tmpdir, "ca-cert.pem"),
+            os.path.join(tmpdir, "srv-cert.pem"),
+            os.path.join(tmpdir, "srv-key.pem"),
+            os.path.join(tmpdir, "cli-cert.pem"),
+            os.path.join(tmpdir, "cli-key.pem"))
+
+
+def test_mtls_roundtrip(manager):
+    """Test mTLS: wsburrow presents client cert, server validates."""
+    import tempfile, shutil
+    tmpdir = tempfile.mkdtemp()
+    ca_cert, srv_cert, srv_key, cli_cert, cli_key = _gen_ca_chain(tmpdir)
+
+    base = 40
+    stop = threading.Event()
+    srv = threading.Thread(target=serve_http, args=("0.0.0.0", HTTP_PORT + base, stop), daemon=True)
+    srv.start()
+    time.sleep(0.3)
+
+    wss_port = WS_PORT + base
+    tunnel_port = TUNNEL_PORT + base
+    log(f"mTLS: wstunnel on {wss_port}, tunnel on {tunnel_port}")
+    manager.start(
+        [WSTUNNEL, "server", f"wss://0.0.0.0:{wss_port}", "--websocket-mask-frame",
+         "--tls-certificate", srv_cert, "--tls-private-key", srv_key,
+         "--tls-client-ca-certs", ca_cert, "--log-lvl", "error"],
+        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+    )
+    time.sleep(4)
+
+    manager.start(
+        [WSBURROW, "-R", f"tcp://{tunnel_port}:localhost:{HTTP_PORT + base}",
+         f"wss://localhost:{wss_port}", "--insecure", "--pool-size", "1",
+         "--client-cert", cli_cert, "--client-key", cli_key],
+        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+    )
+    time.sleep(4)
+
+    data = tcp_send_recv("localhost", tunnel_port, b"GET / HTTP/1.0\r\n\r\n", timeout=10)
+    assert b"hello" in data, f"Expected 'hello' in response, got: {data}"
+    shutil.rmtree(tmpdir, ignore_errors=True)
+    log("PASS: test_mtls_roundtrip")
+    return True
+
+
+def test_mtls_rejected(manager):
+    """Test that wsburrow keeps retrying (not fatal) when server demands client cert but none configured."""
+    import tempfile, shutil
+    tmpdir = tempfile.mkdtemp()
+    ca_cert, srv_cert, srv_key, _cli_cert, _cli_key = _gen_ca_chain(tmpdir)
+
+    base = 41
+    stop = threading.Event()
+    srv = threading.Thread(target=serve_http, args=("0.0.0.0", HTTP_PORT + base, stop), daemon=True)
+    srv.start()
+    time.sleep(0.3)
+
+    wss_port = WS_PORT + base
+    with ProcManager() as mgr2:
+        mgr2.start(
+            [WSTUNNEL, "server", f"wss://0.0.0.0:{wss_port}", "--websocket-mask-frame",
+             "--tls-certificate", srv_cert, "--tls-private-key", srv_key,
+             "--tls-client-ca-certs", ca_cert, "--log-lvl", "error"],
+            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+        )
+        time.sleep(4)
+
+        p = subprocess.Popen(
+            [WSBURROW, "-R", f"tcp://{TUNNEL_PORT + base}:localhost:{HTTP_PORT + base}",
+             f"wss://localhost:{wss_port}", "--insecure", "--pool-size", "1"],
+            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+        )
+        time.sleep(5)
+        try:
+            ret = p.poll()
+            assert ret is None, f"wsburrow should keep retrying, but exited with code {ret}"
+            log("wsburrow running (retrying as expected)")
+        finally:
+            p.terminate()
+            p.wait()
+
+    shutil.rmtree(tmpdir, ignore_errors=True)
+    log("PASS: test_mtls_rejected")
+    return True
+
+
 def test_invalid_url_exits(manager):
     """Verify wsburrow exits with code 1 on invalid URL."""
     result = subprocess.run(
@@ -375,6 +501,8 @@ def main():
         ("ping_keepalive", test_ping_keepalive),
         ("multiple_tunnels", test_multiple_tunnels),
         ("tls_roundtrip", test_tls_roundtrip),
+        ("mtls_roundtrip", test_mtls_roundtrip),
+        ("mtls_rejected", test_mtls_rejected),
         ("invalid_url_exits", test_invalid_url_exits),
         ("unreachable_server", test_unreachable_server),
     ]

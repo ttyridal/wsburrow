@@ -34,6 +34,8 @@ int main(int argc, char **argv)
     info.protocols = tunnel_get_protocols();
     info.options = LWS_SERVER_OPTION_DO_SSL_GLOBAL_INIT |
                    LWS_SERVER_OPTION_ULOOP;
+    info.client_ssl_cert_filepath = cfg.client_cert[0] ? cfg.client_cert : NULL;
+    info.client_ssl_private_key_filepath = cfg.client_key[0] ? cfg.client_key : NULL;
 
     lwsc = lws_create_context(&info);
     if (!lwsc) {

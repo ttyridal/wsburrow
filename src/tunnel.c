@@ -36,6 +36,7 @@ struct tunnel_pool {
     int ping_interval;
     int use_tls;
     int insecure;
+    int client_cert_set;
     struct pool_entry entries[MAX_POOL];
     struct uloop_timeout ping_timer;
 };
@@ -148,6 +149,7 @@ struct tunnel_pool *tunnel_pool_create(struct lws_context *lwsc,
     pool->ping_interval = cfg->ping_interval;
     pool->use_tls = cfg->use_tls;
     pool->insecure = cfg->insecure;
+    pool->client_cert_set = cfg->client_cert[0] ? 1 : 0;
     if (pool->pool_size > MAX_POOL) pool->pool_size = MAX_POOL;
 
     char jwt[512];
@@ -216,6 +218,18 @@ static void pool_entry_on_close(void *ctx)
     struct pool_entry *e = (struct pool_entry *)ctx;
     uloop_timeout_cancel(&e->pong_timer);
     e->dead = 1;
+
+    if (e->pool->client_cert_set) {
+        int all_dead = 1;
+        for (int i = 0; i < e->pool->pool_size; i++)
+            if (!e->pool->entries[i].dead)
+                all_dead = 0;
+        if (all_dead) {
+            fprintf(stderr, "error: all connections failed with client cert configured\n");
+            uloop_end();
+            return;
+        }
+    }
 
     int shift = e->retry_count < 5 ? e->retry_count : 5;
     int delay = BACKOFF_BASE_MS << shift;

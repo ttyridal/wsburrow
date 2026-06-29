@@ -115,6 +115,14 @@ int config_parse(struct config *cfg, int argc, char **argv)
             if (cfg->ping_interval < 1) return -1;
         } else if (strcmp(argv[i], "--insecure") == 0) {
             cfg->insecure = 1;
+        } else if (strcmp(argv[i], "--client-cert") == 0) {
+            i++;
+            if (i >= argc) return -1;
+            strncpy(cfg->client_cert, argv[i], sizeof(cfg->client_cert) - 1);
+        } else if (strcmp(argv[i], "--client-key") == 0) {
+            i++;
+            if (i >= argc) return -1;
+            strncpy(cfg->client_key, argv[i], sizeof(cfg->client_key) - 1);
         } else if (argv[i][0] != '-') {
             if (parse_url(cfg, argv[i]) != 0) return -1;
         } else {
@@ -123,6 +131,9 @@ int config_parse(struct config *cfg, int argc, char **argv)
     }
 
     if (cfg->server_port == 0) return -1;
+    if ((cfg->client_cert[0] && !cfg->client_key[0]) ||
+        (!cfg->client_cert[0] && cfg->client_key[0]))
+        return -1;
     return 0;
 }
 
