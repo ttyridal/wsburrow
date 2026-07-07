@@ -1,5 +1,7 @@
 #!/bin/sh
 curl -o libwebsockets-4.5.8.zip  https://github.com/warmcat/libwebsockets/archive/refs/tags/v4.5.8.zip
+unzip libwebsockets-4.5.8.zip -d ./libwebsockets-4.5.8
+
 
 git init libubox
 cd libubox
