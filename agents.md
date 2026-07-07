@@ -3,7 +3,11 @@
 ## Project Goal
 Build wsburrow: a stripped-down wstunnel-compatible C client for OpenWRT (client only, reverse TCP tunnels). Protocol compatible with wstunnel 10.5.5 server.
 
-## Merge Complete
+## Project Agent Rules
+When managing compilation loops, delegate work to subagents:
+- Call `@debugger` to process raw compiler output logs and generate quick syntax diffs.
+- Call `@coder` to safely write functional changes into `.c` and `.h` files.
+- Call `@architect` if the build failure stems from a missing Makefile flag or path block.
 
 ### Updates Applied to `/project/wsburrow/agents.md`
 
@@ -34,7 +38,7 @@ Build wsburrow: a stripped-down wstunnel-compatible C client for OpenWRT (client
   - Code: C, libwebsockets 4.5.8 vendored
   - Build: CMake
   - Event loop: uloop
-  - Dependencies: mbedtls, libubox
+  - Dependencies: libubox (libwebsockets brings its own TLS backend)
   - WS server: `/project/wstunnel-10.5.5/bin/wstunnel`
   - Testing: gtest (6/9 units), **10/10 integration tests passing**
 

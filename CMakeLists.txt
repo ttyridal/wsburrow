@@ -39,11 +39,8 @@ target_compile_options(websockets PRIVATE -include /usr/include/assert.h)
 target_link_libraries(websockets_shared ubox)
 
 # ---- our application ----
-find_library(MBEDTLS_LIB mbedtls REQUIRED)
-find_library(MBEDCRYPTO_LIB mbedcrypto REQUIRED)
-find_path(MBEDTLS_INCLUDE_DIR mbedtls/base64.h)
-
 add_library(wsburrow_lib STATIC
+    src/base64.c
     src/config.c
     src/jwt.c
     src/tunnel.c
@@ -51,11 +48,8 @@ add_library(wsburrow_lib STATIC
     src/local_tcp.c
 )
 target_include_directories(wsburrow_lib PUBLIC src)
-target_include_directories(wsburrow_lib PRIVATE ${MBEDTLS_INCLUDE_DIR})
 target_link_libraries(wsburrow_lib PUBLIC
     websockets_shared
-    ${MBEDTLS_LIB}
-    ${MBEDCRYPTO_LIB}
     ubox
 )
 
