@@ -1,0 +1,51 @@
+diff --git a/CMakeLists.txt b/CMakeLists.txt
+index bb67fec..e5d61c5 100644
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -11,12 +11,15 @@ IF(CMAKE_C_COMPILER_VERSION VERSION_GREATER 6)
+ ENDIF()
+ ADD_DEFINITIONS(-Os -std=gnu99 -g3 -Wmissing-declarations -Wno-unused-parameter)
+ 
+-OPTION(BUILD_LUA "build Lua plugin" ON)
+-OPTION(BUILD_EXAMPLES "build examples" ON)
++OPTION(BUILD_LUA "build Lua plugin" OFF)
++OPTION(BUILD_EXAMPLES "build examples" OFF)
+ 
+ INCLUDE(FindPkgConfig)
+-PKG_SEARCH_MODULE(JSONC json-c REQUIRED)
+-INCLUDE_DIRECTORIES(${JSONC_INCLUDE_DIRS})
++PKG_SEARCH_MODULE(JSONC json-c)
++IF(JSONC_FOUND)
++    INCLUDE_DIRECTORIES(${JSONC_INCLUDE_DIRS})
++    ADD_DEFINITIONS(-DJSONC_OPTIONAL)
++ENDIF()
+ 
+ SET(SOURCES avl.c avl-cmp.c blob.c blobmsg.c uloop.c usock.c ustream.c ustream-fd.c vlist.c utils.c safe_list.c runqueue.c md5.c kvlist.c ulog.c base64.c udebug.c udebug-remote.c)
+ 
+@@ -45,7 +48,9 @@ INSTALL(TARGETS ubox ubox-static
+ 	LIBRARY DESTINATION lib
+ )
+ 
+-ADD_SUBDIRECTORY(lua)
++IF(BUILD_LUA)
++    ADD_SUBDIRECTORY(lua)
++ENDIF()
+ ADD_SUBDIRECTORY(examples)
+ 
+ MACRO(ADD_UNIT_TEST_SAN name)
+@@ -62,11 +67,14 @@ IF(UNIT_TESTING)
+ ENDIF()
+ 
+ find_library(json NAMES json-c)
+-IF(EXISTS ${json})
++find_path(JSONC_INCLUDE json.h)
++IF(json AND EXISTS ${json} AND JSONC_INCLUDE)
+ 	ADD_LIBRARY(blobmsg_json SHARED blobmsg_json.c)
++	TARGET_INCLUDE_DIRECTORIES(blobmsg_json PRIVATE ${JSONC_INCLUDE})
+ 	TARGET_LINK_LIBRARIES(blobmsg_json ubox ${json})
+ 
+ 	ADD_LIBRARY(blobmsg_json-static STATIC blobmsg_json.c)
++	TARGET_INCLUDE_DIRECTORIES(blobmsg_json-static PRIVATE ${JSONC_INCLUDE})
+ 	SET_TARGET_PROPERTIES(blobmsg_json-static
+ 			      PROPERTIES OUTPUT_NAME blobmsg_json)
+ 
