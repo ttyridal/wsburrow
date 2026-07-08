@@ -41,6 +41,7 @@ int main(int argc, char **argv)
                    LWS_SERVER_OPTION_ULOOP;
     info.client_ssl_cert_filepath = cfg.client_cert[0] ? cfg.client_cert : NULL;
     info.client_ssl_private_key_filepath = cfg.client_key[0] ? cfg.client_key : NULL;
+    info.timeout_secs = 86400;  // 24h, server may delay 101 until client connects
 
     lwsc = lws_create_context(&info);
     if (!lwsc) {
