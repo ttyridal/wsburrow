@@ -137,16 +137,24 @@ static void ping_cb(struct uloop_timeout *t)
 {
     struct tunnel_pool *pool = container_of(t, struct tunnel_pool, ping_timer);
     if (pool->ping_interval <= 0) return;
+    
+    int any_connected = 0;
     for (int i = 0; i < pool->pool_size; i++) {
-        if (pool->entries[i].ws && pool->entries[i].handshake_done) {
-            DEBUG("ping_cb sending ping on entry %d", i);
-            if (ws_client_ping(pool->entries[i].ws) == 0)
-                uloop_timeout_set(&pool->entries[i].pong_timer, PONG_TIMEOUT_MS);
+        if (pool->entries[i].ws) {
+            any_connected = 1;
+            if (pool->entries[i].handshake_done) {
+                DEBUG("ping_cb sending ping on entry %d", i);
+                if (ws_client_ping(pool->entries[i].ws) == 0)
+                    uloop_timeout_set(&pool->entries[i].pong_timer, PONG_TIMEOUT_MS);
+            }
         } else {
             DEBUG("ping_cb entry %d has no ws, skipping", i);
         }
     }
-    uloop_timeout_set(t, pool->ping_interval * 1000);
+    
+    // Keep timer running as long as any entry has a connection (even if handshake not done)
+    if (any_connected)
+        uloop_timeout_set(t, pool->ping_interval * 1000);
 }
 
 struct tunnel_pool *tunnel_pool_create(struct lws_context *lwsc,

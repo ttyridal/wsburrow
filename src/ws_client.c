@@ -166,6 +166,7 @@ int wsburrow_callback(struct lws *wsi, enum lws_callback_reasons reason,
 
     case LWS_CALLBACK_CLIENT_CLOSED:
     case LWS_CALLBACK_CLOSED_CLIENT_HTTP:
+        fprintf(stderr, "info: disconnected from tunnel server\n");
         if (c) {
             c->wsi = NULL;
             if (c->ops.on_close)
@@ -174,11 +175,20 @@ int wsburrow_callback(struct lws *wsi, enum lws_callback_reasons reason,
         break;
 
     case LWS_CALLBACK_CLIENT_CONNECTION_ERROR:
+        fprintf(stderr, "info: connection error to tunnel server\n");
         if (c) {
             c->wsi = NULL;
             if (c->ops.on_close)
                 c->ops.on_close(c->ops.ctx);
         }
+        break;
+
+    case LWS_CALLBACK_CLIENT_APPEND_HANDSHAKE_HEADER:
+        fprintf(stderr, "info: connected to tunnel server\n");
+        break;
+
+    case LWS_CALLBACK_CONNECTING:
+        DEBUG("connecting to tunnel server");
         break;
 
     case LWS_CALLBACK_WS_CLIENT_BIND_PROTOCOL:
