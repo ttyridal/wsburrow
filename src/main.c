@@ -5,6 +5,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <signal.h>
+#include <time.h>
 
 static struct lws_context *lwsc;
 static struct tunnel_pool **pools;
@@ -27,6 +28,8 @@ int main(int argc, char **argv)
     }
 
     uloop_init();
+
+    srand((unsigned)time(NULL));
 
     signal(SIGINT, sigint_cb);
     signal(SIGTERM, sigint_cb);

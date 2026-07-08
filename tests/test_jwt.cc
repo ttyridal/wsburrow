@@ -28,7 +28,7 @@ TEST(JwtTest, Base64urlReplacesChars) {
 
 TEST(JwtTest, EncodesReverseTcpToken) {
     char jwt[512];
-    int ret = jwt_encode_reverse_tcp("127.0.0.1", 9090, jwt, sizeof(jwt));
+    int ret = jwt_encode_reverse_tcp("127.0.0.1", 9090, "testid01", jwt, sizeof(jwt));
     ASSERT_EQ(ret, 0);
 
     int dots = 0;
@@ -49,12 +49,12 @@ TEST(JwtTest, EncodesReverseTcpToken) {
 
 TEST(JwtTest, EncodesDifferentBindAddr) {
     char jwt[512];
-    jwt_encode_reverse_tcp("0.0.0.0", 9091, jwt, sizeof(jwt));
+    jwt_encode_reverse_tcp("0.0.0.0", 9091, "testid02", jwt, sizeof(jwt));
     ASSERT_GT(strlen(jwt), 0);
 }
 
 TEST(JwtTest, FailsOnSmallBuffer) {
     char small[10];
-    int ret = jwt_encode_reverse_tcp("127.0.0.1", 9090, small, sizeof(small));
+    int ret = jwt_encode_reverse_tcp("127.0.0.1", 9090, "testid03", small, sizeof(small));
     ASSERT_NE(ret, 0);
 }

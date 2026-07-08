@@ -90,6 +90,8 @@ static void entry_reconnect_cb(struct uloop_timeout *t)
 static void pool_entry_on_pong(void *ctx)
 {
     struct pool_entry *e = (struct pool_entry *)ctx;
+    int idx = (int)(e - e->pool->entries);
+    fprintf(stderr, "debug: pong received on entry %d\n", idx);
     uloop_timeout_cancel(&e->pong_timer);
 }
 
@@ -130,8 +132,11 @@ static void ping_cb(struct uloop_timeout *t)
     struct tunnel_pool *pool = container_of(t, struct tunnel_pool, ping_timer);
     for (int i = 0; i < pool->pool_size; i++) {
         if (pool->entries[i].ws) {
-            ws_client_ping(pool->entries[i].ws);
-            uloop_timeout_set(&pool->entries[i].pong_timer, PONG_TIMEOUT_MS);
+            fprintf(stderr, "debug: ping_cb sending ping on entry %d\n", i);
+            if (ws_client_ping(pool->entries[i].ws) == 0)
+                uloop_timeout_set(&pool->entries[i].pong_timer, PONG_TIMEOUT_MS);
+        } else {
+            fprintf(stderr, "debug: ping_cb entry %d has no ws, skipping\n", i);
         }
     }
     uloop_timeout_set(t, pool->ping_interval * 1000);
@@ -156,13 +161,15 @@ struct tunnel_pool *tunnel_pool_create(struct lws_context *lwsc,
     if (pool->pool_size > MAX_POOL) pool->pool_size = MAX_POOL;
 
     char jwt[512];
-    if (jwt_encode_reverse_tcp(tcfg->bind_addr, tcfg->bind_port,
-                               jwt, sizeof(jwt)) != 0) {
-        free(pool);
-        return NULL;
-    }
-
     for (int i = 0; i < pool->pool_size; i++) {
+        char id[32];
+        snprintf(id, sizeof(id), "%08x%04x",
+                 (unsigned)rand(), (unsigned)i);
+        if (jwt_encode_reverse_tcp(tcfg->bind_addr, tcfg->bind_port,
+                                   id, jwt, sizeof(jwt)) != 0) {
+            free(pool);
+            return NULL;
+        }
         pool->entries[i].pool = pool;
         strncpy(pool->entries[i].jwt, jwt, sizeof(pool->entries[i].jwt) - 1);
         pool_entry_connect(pool, i);

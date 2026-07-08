@@ -15,8 +15,8 @@ struct ws_client {
     char path[128];
     unsigned char pending[LWS_PRE + PENDING_MAX];
     int pending_len;
-    int need_ping;
     int closing;
+    int need_ping;
 };
 
 struct ws_client *ws_client_create(struct lws_context *lwsc,
@@ -80,7 +80,11 @@ int ws_client_enqueue(struct ws_client *c, const void *data, int len)
 
 int ws_client_ping(struct ws_client *c)
 {
-    if (!c->wsi || c->closing) return -1;
+    if (!c->wsi || c->closing) {
+        fprintf(stderr, "debug: ping aborted (wsi=%p closing=%d)\n",
+                (void *)c->wsi, c->closing);
+        return -1;
+    }
     c->need_ping = 1;
     lws_callback_on_writable(c->wsi);
     return 0;
@@ -116,8 +120,10 @@ int wsburrow_callback(struct lws *wsi, enum lws_callback_reasons reason,
     switch (reason) {
     case LWS_CALLBACK_CLIENT_ESTABLISHED:
     case LWS_CALLBACK_ESTABLISHED_CLIENT_HTTP:
-        if (c && c->ops.on_connect)
-            c->ops.on_connect(c->ops.ctx);
+        if (c) {
+            if (c->ops.on_connect)
+                c->ops.on_connect(c->ops.ctx);
+        }
         break;
 
     case LWS_CALLBACK_CLIENT_RECEIVE:
@@ -178,6 +184,7 @@ int wsburrow_callback(struct lws *wsi, enum lws_callback_reasons reason,
         break;
 
     case LWS_CALLBACK_CLIENT_RECEIVE_PONG:
+        fprintf(stderr, "debug: received ws pong\n");
         if (c && c->ops.on_pong)
             c->ops.on_pong(c->ops.ctx);
         break;
