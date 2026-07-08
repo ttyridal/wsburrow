@@ -5,7 +5,7 @@ PKG_VERSION:=1.0
 PKG_RELEASE:=1
 
 PKG_SOURCE_PROTO:=git
-PKG_SOURCE_URL:=https://github.com/yourorg/wsburrow
+PKG_SOURCE_URL:=https://github.com/ttyridal/wsburrow
 PKG_SOURCE_VERSION:=HEAD
 PKG_MIRROR_HASH:=
 
@@ -21,7 +21,7 @@ define Package/wsburrow
   SECTION:=net
   CATEGORY:=Network
   TITLE:=Wstunnel-compatible WebSocket reverse-tunnel client
-  URL:=https://github.com/yourorg/wsburrow
+  URL:=https://github.com/ttyridal/wsburrow
   DEPENDS:=+libubox +libwebsockets
 endef
 
