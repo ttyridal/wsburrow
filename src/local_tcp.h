@@ -20,6 +20,7 @@ int local_tcp_send(struct local_tcp *t, const void *data, int len);
 void local_tcp_read_blocked(struct local_tcp *t, int blocked);
 void local_tcp_drain(struct local_tcp *t);
 void local_tcp_destroy(struct local_tcp *t);
+void local_tcp_set_verbose(int v);
 
 #ifdef __cplusplus
 }

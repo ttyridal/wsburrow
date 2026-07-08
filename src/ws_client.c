@@ -3,6 +3,11 @@
 #include <string.h>
 #include <stdio.h>
 
+/* Verbose debug - set by tunnel.c */
+static int ws_verbose_debug = 0;
+void ws_set_verbose(int v) { ws_verbose_debug = v; }
+#define DEBUG(fmt, ...) do { if (ws_verbose_debug) fprintf(stderr, "debug: " fmt "\n", ##__VA_ARGS__); } while(0)
+
 #define PENDING_MAX 4096
 
 struct ws_client {
@@ -81,8 +86,7 @@ int ws_client_enqueue(struct ws_client *c, const void *data, int len)
 int ws_client_ping(struct ws_client *c)
 {
     if (!c->wsi || c->closing) {
-        fprintf(stderr, "debug: ping aborted (wsi=%p closing=%d)\n",
-                (void *)c->wsi, c->closing);
+        DEBUG("ping aborted (wsi=%p closing=%d)", (void *)c->wsi, c->closing);
         return -1;
     }
     c->need_ping = 1;
@@ -184,7 +188,7 @@ int wsburrow_callback(struct lws *wsi, enum lws_callback_reasons reason,
         break;
 
     case LWS_CALLBACK_CLIENT_RECEIVE_PONG:
-        fprintf(stderr, "debug: received ws pong\n");
+        DEBUG("received ws pong");
         if (c && c->ops.on_pong)
             c->ops.on_pong(c->ops.ctx);
         break;

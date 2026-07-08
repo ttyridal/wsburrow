@@ -17,6 +17,7 @@ struct config {
     int  server_port;
     int  use_tls;
 
+    int  verbose;
     int  pool_size;
     int  ping_interval;
     int  insecure;

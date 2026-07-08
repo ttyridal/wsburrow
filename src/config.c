@@ -123,7 +123,9 @@ int config_parse(struct config *cfg, int argc, char **argv)
             i++;
             if (i >= argc) return -1;
             cfg->ping_interval = atoi(argv[i]);
-            if (cfg->ping_interval < 1 || cfg->ping_interval > INT_MAX / 1000) return -1;
+            if (cfg->ping_interval < 0 || cfg->ping_interval > INT_MAX / 1000) return -1;
+        } else if (strcmp(argv[i], "-v") == 0 || strcmp(argv[i], "--verbose") == 0) {
+            cfg->verbose = 1;
         } else if (strcmp(argv[i], "--insecure") == 0) {
             cfg->insecure = 1;
         } else if (strcmp(argv[i], "--client-cert") == 0) {
@@ -144,6 +146,7 @@ int config_parse(struct config *cfg, int argc, char **argv)
                 "Options:\n"
                 "  --pool-size N              Connections per tunnel (default: 3)\n"
                 "  --ping-interval N          Ping interval seconds (default: 15)\n"
+                "  -v, --verbose              Verbose debug output\n"
                 "  --insecure                 Allow self-signed/expired server certs\n"
                 "  --client-cert FILE         mTLS client certificate\n"
                 "  --client-key FILE          mTLS client private key\n"

@@ -29,6 +29,8 @@ void ws_client_request_write(struct ws_client *c);
 struct lws *ws_client_wsi(struct ws_client *c);
 void ws_client_destroy(struct ws_client *c);
 
+void ws_set_verbose(int v);
+
 /* lws callback for wsburrow protocol */
 int wsburrow_callback(struct lws *wsi, enum lws_callback_reasons reason,
                        void *user, void *in, size_t len);

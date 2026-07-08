@@ -3,6 +3,11 @@
 #include <string.h>
 #include <stdio.h>
 #include <unistd.h>
+
+/* Verbose debug - set by tunnel.c */
+static int local_tcp_verbose = 0;
+void local_tcp_set_verbose(int v) { local_tcp_verbose = v; }
+#define DEBUG(fmt, ...) do { if (local_tcp_verbose) fprintf(stderr, "debug: " fmt "\n", ##__VA_ARGS__); } while(0)
 #include <sys/socket.h>
 #include <libubox/usock.h>
 #include <libubox/ustream.h>
@@ -73,6 +78,7 @@ static void conn_fd_cb(struct uloop_fd *fd, unsigned int events)
                               t->pending, t->pending_len, 0);
                 t->pending_len = 0;
             }
+            DEBUG("local connection established (fd %d)", fd->fd);
             if (t->ops.on_connect)
                 t->ops.on_connect(t->ops.ctx);
         } else {
@@ -148,11 +154,14 @@ void local_tcp_destroy(struct local_tcp *t)
     if (!t) return;
     t->closing = 1;
     if (t->connecting) {
+        DEBUG("local connection closed (fd %d)", t->connect_fd.fd);
         uloop_fd_delete(&t->connect_fd);
         if (t->connect_fd.fd >= 0)
             close(t->connect_fd.fd);
     } else {
         int fd = t->s_fd.fd.fd;
+        if (fd >= 0)
+            DEBUG("local connection closed (fd %d)", fd);
         ustream_free(&t->s_fd.stream);
         if (fd >= 0)
             close(fd);

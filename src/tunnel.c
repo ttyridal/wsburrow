@@ -8,6 +8,9 @@
 #include <libubox/list.h>
 #include <unistd.h>
 
+static int verbose_debug = 0;
+#define DEBUG(fmt, ...) do { if (verbose_debug) fprintf(stderr, "debug: " fmt "\n", ##__VA_ARGS__); } while(0)
+
 #define MAX_POOL 32
 #define PONG_TIMEOUT_MS  8000
 #define BACKOFF_BASE_MS  1000
@@ -18,6 +21,7 @@ struct pool_entry {
     struct ws_client *ws;
     struct local_tcp *local;
     int dead;
+    int handshake_done;
     char jwt[512];
     struct uloop_timeout pong_timer;
     struct uloop_timeout reconnect_timer;
@@ -34,6 +38,7 @@ struct tunnel_pool {
     int server_port;
     int pool_size;
     int ping_interval;
+    int verbose;
     int use_tls;
     int insecure;
     int client_cert_set;
@@ -91,7 +96,7 @@ static void pool_entry_on_pong(void *ctx)
 {
     struct pool_entry *e = (struct pool_entry *)ctx;
     int idx = (int)(e - e->pool->entries);
-    fprintf(stderr, "debug: pong received on entry %d\n", idx);
+    DEBUG("pong received on entry %d", idx);
     uloop_timeout_cancel(&e->pong_timer);
 }
 
@@ -114,6 +119,7 @@ static void pool_entry_connect(struct tunnel_pool *pool, int idx)
     e->ws = ws_client_create(pool->lwsc, &ops);
     if (!e->ws) return;
 
+    e->handshake_done = 0;
     e->pong_timer.cb = pong_timeout_cb;
     e->reconnect_timer.cb = entry_reconnect_cb;
 
@@ -130,13 +136,14 @@ static void pool_entry_connect(struct tunnel_pool *pool, int idx)
 static void ping_cb(struct uloop_timeout *t)
 {
     struct tunnel_pool *pool = container_of(t, struct tunnel_pool, ping_timer);
+    if (pool->ping_interval <= 0) return;
     for (int i = 0; i < pool->pool_size; i++) {
-        if (pool->entries[i].ws) {
-            fprintf(stderr, "debug: ping_cb sending ping on entry %d\n", i);
+        if (pool->entries[i].ws && pool->entries[i].handshake_done) {
+            DEBUG("ping_cb sending ping on entry %d", i);
             if (ws_client_ping(pool->entries[i].ws) == 0)
                 uloop_timeout_set(&pool->entries[i].pong_timer, PONG_TIMEOUT_MS);
         } else {
-            fprintf(stderr, "debug: ping_cb entry %d has no ws, skipping\n", i);
+            DEBUG("ping_cb entry %d has no ws, skipping", i);
         }
     }
     uloop_timeout_set(t, pool->ping_interval * 1000);
@@ -155,6 +162,10 @@ struct tunnel_pool *tunnel_pool_create(struct lws_context *lwsc,
     pool->server_port = cfg->server_port;
     pool->pool_size = cfg->pool_size;
     pool->ping_interval = cfg->ping_interval;
+    pool->verbose = cfg->verbose;
+    verbose_debug = cfg->verbose;
+    ws_set_verbose(cfg->verbose);
+    local_tcp_set_verbose(cfg->verbose);
     pool->use_tls = cfg->use_tls;
     pool->insecure = cfg->insecure;
     pool->client_cert_set = cfg->client_cert[0] ? 1 : 0;
@@ -175,8 +186,10 @@ struct tunnel_pool *tunnel_pool_create(struct lws_context *lwsc,
         pool_entry_connect(pool, i);
     }
 
-    pool->ping_timer.cb = ping_cb;
-    uloop_timeout_set(&pool->ping_timer, pool->ping_interval * 1000);
+    if (pool->ping_interval > 0) {
+        pool->ping_timer.cb = ping_cb;
+        uloop_timeout_set(&pool->ping_timer, pool->ping_interval * 1000);
+    }
 
     return pool;
 }
@@ -199,6 +212,7 @@ void tunnel_pool_destroy(struct tunnel_pool *pool)
 static void pool_entry_on_connect(void *ctx)
 {
     struct pool_entry *e = (struct pool_entry *)ctx;
+    e->handshake_done = 1;
     e->pool->ever_connected = 1;
     e->retry_count = 0;
 
