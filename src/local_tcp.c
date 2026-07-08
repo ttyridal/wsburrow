@@ -152,7 +152,10 @@ void local_tcp_destroy(struct local_tcp *t)
         if (t->connect_fd.fd >= 0)
             close(t->connect_fd.fd);
     } else {
+        int fd = t->s_fd.fd.fd;
         ustream_free(&t->s_fd.stream);
+        if (fd >= 0)
+            close(fd);
     }
     free(t);
 }

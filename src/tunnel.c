@@ -251,6 +251,12 @@ static void pool_entry_on_close(void *ctx)
     uloop_timeout_cancel(&e->pong_timer);
     e->dead = 1;
 
+    // Close the local TCP connection so the destination sees the disconnect
+    if (e->local) {
+        local_tcp_destroy(e->local);
+        e->local = NULL;
+    }
+
     int all_dead = 1;
     for (int i = 0; i < e->pool->pool_size; i++)
         if (!e->pool->entries[i].dead)
