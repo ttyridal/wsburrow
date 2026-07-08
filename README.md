@@ -56,6 +56,8 @@ This uses system `libubox` and `libwebsockets` from the OpenWRT feed (with `-DWS
 wsburrow [options] ws[s]://server:port
 ```
 
+note that wsburrow follows the websocket specification. wstunnel needs to be started with --websocket-mask-frame
+
 ### Options
 
 | Flag | Description |
