@@ -134,6 +134,21 @@ int config_parse(struct config *cfg, int argc, char **argv)
             i++;
             if (i >= argc) return -1;
             strncpy(cfg->client_key, argv[i], sizeof(cfg->client_key) - 1);
+        } else if (strcmp(argv[i], "-h") == 0 || strcmp(argv[i], "--help") == 0) {
+            fprintf(stdout,
+                "Usage: wsburrow [options] ws[s]://server:port\n"
+                "\n"
+                "Reverse tunnels:\n"
+                "  -R tcp://bind:dest:port    Local dest reachable via server's bind port\n"
+                "\n"
+                "Options:\n"
+                "  --pool-size N              Connections per tunnel (default: 3)\n"
+                "  --ping-interval N          Ping interval seconds (default: 15)\n"
+                "  --insecure                 Allow self-signed/expired server certs\n"
+                "  --client-cert FILE         mTLS client certificate\n"
+                "  --client-key FILE          mTLS client private key\n"
+                "  -h, --help                 Show this help\n");
+            exit(0);
         } else if (argv[i][0] != '-') {
             if (parse_url(cfg, argv[i]) != 0) return -1;
         } else {
