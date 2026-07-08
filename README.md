@@ -37,7 +37,7 @@ wsburrow includes an OpenWRT package feed:
 
 ```shell
 # feeds.conf
-src-git wsburrow https://github.com/ttyridal/wsburrow.git^openwrt
+src-git wsburrow https://github.com/ttyridal/wsburrow.git
 ```
 
 Then:
