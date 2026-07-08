@@ -2,7 +2,4 @@ build/
 __pycache__/
 *.pyc
 wstunnel-*/
-vendor/libwebsockets-4.5.8/
-vendor/libubox/
-!vendor/libubox/*.cmake
-!vendor/libubox/CMakeLists.txt
+vendor/*
