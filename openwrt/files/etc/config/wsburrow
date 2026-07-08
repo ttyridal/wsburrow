@@ -1,0 +1,11 @@
+# Configuration for wsburrow reverse tunnel client
+# This file is read by /etc/init.d/wsburrow
+
+config wsburrow 'main'
+    # The wstunnel server URL to connect to (required)
+    # Example: ws://tun.example.com:8080
+    option server_url ''
+    
+    # Additional arguments passed to wsburrow (optional)
+    # Example: '-R tcp://9090:localhost:22 --pool-size 3 --ping-interval 10'
+    option arguments ''

@@ -58,6 +58,18 @@ wsburrow [options] ws[s]://server:port
 
 note that wsburrow follows the websocket specification. wstunnel needs to be started with --websocket-mask-frame
 
+
+### Openwrt
+```shell
+# Configure
+uci set wsburrow.main.server_url='ws://tun.example.com:8080'
+uci set wsburrow.main.arguments='-R tcp://9090:127.0.0.1:22 --pool-size 1'
+uci commit wsburrow
+# Start
+/etc/init.d/wsburrow enable
+/etc/init.d/wsburrow start
+```
+
 ### Options
 
 | Flag | Description |
