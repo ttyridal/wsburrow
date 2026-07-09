@@ -22,7 +22,7 @@ define Package/wsburrow
 	CATEGORY:=Network
 	TITLE:=Wstunnel-compatible WebSocket reverse-tunnel client
 	URL:=https://github.com/ttyridal/wsburrow
-	DEPENDS:=+libubox +libwebsockets
+	DEPENDS:=+libubox +libblobmsg-json +libwebsockets
 endef
 
 define Package/wsburrow/description
