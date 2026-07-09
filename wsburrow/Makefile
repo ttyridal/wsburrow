@@ -7,7 +7,7 @@ PKG_RELEASE:=1
 PKG_SOURCE_PROTO:=git
 PKG_SOURCE_URL:=https://github.com/ttyridal/wsburrow
 PKG_SOURCE_VERSION:=HEAD
-PKG_MIRROR_HASH:=fedfed7436a7289410d3b432b34467510aa77788
+PKG_MIRROR_HASH:=a90018024e5b53e2b2807e6181e10cd6d9cf9c31
 
 PKG_BUILD_DIR:=$(BUILD_DIR)/$(PKG_NAME)-$(PKG_VERSION)
 
@@ -40,7 +40,7 @@ endef
 
 define Package/wsburrow/install
 	$(INSTALL_DIR) $(1)/usr/bin
-	$(INSTALL_BIN) $(PKG_BUILD_DIR)/wsburrow $(1)/usr/bin/
+	$(INSTALL_BIN) $(PKG_BUILD_DIR)/bin/wsburrow $(1)/usr/bin/
 endef
 
 $(eval $(call BuildPackage,wsburrow))
