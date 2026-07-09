@@ -83,6 +83,10 @@ set_target_properties(wsburrow PROPERTIES
     RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin"
 )
 
+install(TARGETS wsburrow
+    RUNTIME DESTINATION bin
+)
+
 if(BUILD_TESTS)
     enable_testing()
     add_subdirectory(tests)
