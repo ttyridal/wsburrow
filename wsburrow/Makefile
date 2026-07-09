@@ -33,14 +33,13 @@ endef
 CMAKE_OPTIONS += -DWSBURROW_USE_SYSTEM_LIBS=ON
 CMAKE_OPTIONS += -DBUILD_TESTS=OFF
 
-define Build/InstallDev
-	$(INSTALL_DIR) $(1)/usr/include
-	$(CP) $(PKG_BUILD_DIR)/src/*.h $(1)/usr/include/
-endef
-
 define Package/wsburrow/install
 	$(INSTALL_DIR) $(1)/usr/bin
 	$(INSTALL_BIN) $(PKG_BUILD_DIR)/bin/wsburrow $(1)/usr/bin/
+	$(INSTALL_DIR) $(1)/etc/config
+	$(INSTALL_DATA) ./files/etc/config/wsburrow $(1)/etc/config/
+	$(INSTALL_DIR) $(1)/etc/init.d
+	$(INSTALL_BIN) ./files/etc/init.d/wsburrow $(1)/etc/init.d/
 endef
 
 $(eval $(call BuildPackage,wsburrow))
