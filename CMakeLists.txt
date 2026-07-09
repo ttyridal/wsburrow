@@ -43,7 +43,9 @@ if(NOT WSBURROW_USE_SYSTEM_LIBS)
   target_link_libraries(websockets_shared ubox)
 else()
   find_package(PkgConfig REQUIRED)
-  pkg_check_modules(LIBUBOX REQUIRED libubox)
+  find_path(LIBUBOX_INCLUDE_DIR NAMES libubox/uloop.h)
+  find_library(LIBUBOX_LIBRARY NAMES ubox)
+  find_library(LIBBLOBMSG_LIBRARY NAMES blobmsg_json)
   pkg_check_modules(LIBWEBSOCKETS REQUIRED libwebsockets)
 endif()
 
@@ -59,12 +61,13 @@ add_library(wsburrow_lib STATIC
 target_include_directories(wsburrow_lib PUBLIC src)
 if(WSBURROW_USE_SYSTEM_LIBS)
   target_include_directories(wsburrow_lib PUBLIC
-      ${LIBUBOX_INCLUDE_DIRS}
+      ${LIBUBOX_INCLUDE_DIR}
       ${LIBWEBSOCKETS_INCLUDE_DIRS}
   )
   target_link_libraries(wsburrow_lib PUBLIC
       ${LIBWEBSOCKETS_LIBRARIES}
-      ${LIBUBOX_LIBRARIES}
+      ${LIBUBOX_LIBRARY}
+      ${LIBBLOBMSG_LIBRARY}
   )
 else()
   target_link_libraries(wsburrow_lib PUBLIC
