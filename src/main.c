@@ -34,6 +34,11 @@ int main(int argc, char **argv)
     signal(SIGINT, sigint_cb);
     signal(SIGTERM, sigint_cb);
 
+    if (cfg.verbose) {
+        int lvl = LLL_ERR | LLL_WARN | LLL_USER | LLL_NOTICE;
+        lws_set_log_level(lvl, NULL);
+    }
+
     struct lws_context_creation_info info = { 0 };
     info.port = CONTEXT_PORT_NO_LISTEN;
     info.protocols = tunnel_get_protocols();
