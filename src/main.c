@@ -19,7 +19,7 @@ static void sigint_cb(int sig)
 
 int main(int argc, char **argv)
 {
-    struct config cfg;
+    struct config cfg={};
     int ret = 1;
 
     if (config_parse(&cfg, argc, argv) != 0) {
@@ -46,6 +46,10 @@ int main(int argc, char **argv)
                    LWS_SERVER_OPTION_ULOOP;
     info.client_ssl_cert_filepath = cfg.client_cert[0] ? cfg.client_cert : NULL;
     info.client_ssl_private_key_filepath = cfg.client_key[0] ? cfg.client_key : NULL;
+    if (!cfg.ca_cert[0]) {
+        info.client_ssl_ca_filepath = "/etc/ssl/certs/ca-certificates.crt";
+    } else
+        info.client_ssl_ca_filepath = cfg.ca_cert;
     info.timeout_secs = 86400;  // 24h, server may delay 101 until client connects
 
     lwsc = lws_create_context(&info);

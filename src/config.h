@@ -27,6 +27,7 @@ struct config {
 
     char client_cert[512];
     char client_key[512];
+    char ca_cert[512];
 };
 
 #ifdef __cplusplus

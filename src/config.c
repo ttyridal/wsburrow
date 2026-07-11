@@ -128,6 +128,10 @@ int config_parse(struct config *cfg, int argc, char **argv)
             cfg->verbose = 1;
         } else if (strcmp(argv[i], "--insecure") == 0) {
             cfg->insecure = 1;
+        } else if (strcmp(argv[i], "--ca-cert") == 0) {
+            i++;
+            if (i >= argc) return -1;
+            strncpy(cfg->ca_cert, argv[i], sizeof(cfg->ca_cert) - 1);
         } else if (strcmp(argv[i], "--client-cert") == 0) {
             i++;
             if (i >= argc) return -1;
@@ -148,6 +152,7 @@ int config_parse(struct config *cfg, int argc, char **argv)
                 "  --ping-interval N          Ping interval seconds (default: 15)\n"
                 "  -v, --verbose              Verbose debug output\n"
                 "  --insecure                 Allow self-signed/expired server certs\n"
+                "  --ca-cert FILE             mTLS server-ca certificate\n"
                 "  --client-cert FILE         mTLS client certificate\n"
                 "  --client-key FILE          mTLS client private key\n"
                 "  -h, --help                 Show this help\n");

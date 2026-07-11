@@ -176,6 +176,7 @@ int wsburrow_callback(struct lws *wsi, enum lws_callback_reasons reason,
 
     case LWS_CALLBACK_CLIENT_CONNECTION_ERROR:
         fprintf(stderr, "info: connection error to tunnel server\n");
+        if (in) fprintf(stderr,"  detail: %.*s\n", len, in);
         if (c) {
             c->wsi = NULL;
             if (c->ops.on_close)
@@ -204,6 +205,7 @@ int wsburrow_callback(struct lws *wsi, enum lws_callback_reasons reason,
         break;
 
     default:
+        //DEBUG("unhandled callback %d\n", reason);
         break;
     }
     return 0;
